@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const Parent = require("./models/Parent");
 const Doctor = require("./models/Doctor");
 const Child = require("./models/Child");
+const Supplement = require("./models/Supplement");
 
 const app = express()
 app.use(cors())
@@ -58,21 +59,8 @@ app.post('/login', async (req, res) => {
         }
 
         // Doctor Login
-        const doctor = await Doctor.findOne({ email: username });
-        if (doctor) {
-            // Check if doctor is deleted (Assuming deleted doctors have a flag `isDeleted: true`)
-            if (doctor.isDeleted) {
-                return res.status(401).json({ status: "Doctor account is deleted. Contact admin." });
-            }
-
-            // Compare password
-            const isMatch = await bcrypt.compare(password, doctor.password);
-            if (!isMatch) {
-                return res.status(401).json({ status: "Invalid username or password" });
-            }
-
-            // Generate token and login
-            const token = jwt.sign({ role: "doctor", id: doctor._id }, "Vaccine-app", { expiresIn: "120d" });
+        if (username === "doctor@gmail.com" && password === "doctor") {
+            const token = jwt.sign({ role: "doctor"}, "Vaccine-app", { expiresIn: "120d" });
             return res.status(200).json({ status: "Doctor login successful", token, role: "doctor" });
         }
 
@@ -201,7 +189,45 @@ app.get('/view-children', authenticateParent, async (req, res) => {
     }
 });
 
-
+// Middleware to verify token and admin role
+const verifyAdmin = (req, res, next) => {
+    const token = req.headers["authorization"];
+    if (!token) {
+      return res.status(401).json({ message: "Authorization token required" });
+    }
+  
+    jwt.verify(token, "Vaccine-app", (err, decoded) => {
+      if (err || decoded.role !== "admin") {
+        return res.status(403).json({ message: "Access denied. Admin only" });
+      }
+      next();
+    });
+  };
+  
+  // Route to add a supplement (only accessible by admin)
+  app.post("/addSupplement", verifyAdmin, async (req, res) => {
+    const { name, category, description, agegroup, dosage } = req.body;
+  
+    // Generate a unique supplement ID (for example, using Date.now())
+    const supplementid = `SUP-${Date.now()}`;
+  
+    try {
+      const newSupplement = new Supplement({
+        supplementid,
+        name,
+        category,
+        description,
+        agegroup,
+        dosage,
+      });
+  
+      await newSupplement.save();
+  
+      res.status(201).json({ message: "Supplement added successfully", supplement: newSupplement });
+    } catch (error) {
+      res.status(500).json({ message: "Error adding supplement", error });
+    }
+  });
 
 
 app.listen(8080,()=>{
